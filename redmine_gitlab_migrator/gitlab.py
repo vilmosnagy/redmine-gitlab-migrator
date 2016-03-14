@@ -147,7 +147,7 @@ class GitlabProject(Project):
         return all((i in gitlab_user_names for i in usernames))
 
     def get_id(self):
-        return self.api.get(self.api_url)['id']
+        return self.project_id
 
     def get_instance(self):
         """ Return a GitlabInstance
