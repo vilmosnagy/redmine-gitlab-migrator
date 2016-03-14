@@ -52,10 +52,11 @@ class GitlabProject(Project):
         self.api_url = (
             '{base_url}api/v3/projects/{namespace}%2F{project_name}'.format(
                 **self._url_match.groupdict()))
-        self.instance_url = '{}/api/v3'.format(
+        self.instance_url = '{}api/v3'.format(
             self._url_match.group('base_url'))
 
         projects_info = self.api.get('{}/projects'.format(self.instance_url))
+        self.project_name = self._url_match.group('project_name')
 
         projectId = -1
         for project_attributes in projects_info:
@@ -119,7 +120,7 @@ class GitlabProject(Project):
         return milestone
 
     def get_issues(self):
-        return self.api.get('{}/project/{}/issues'.format(self.instance_url, self.project_id))
+        return self.api.get('{}/projects/{}/issues'.format(self.instance_url, self.project_id))
         #return self.api.get('{}/issues'.format(self.api_url))
 
     def get_members(self):
