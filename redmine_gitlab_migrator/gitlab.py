@@ -108,7 +108,7 @@ class GitlabProject(Project):
         :param data: dict formatted as the gitlab API expects it
         :return: the created milestone
         """
-        milestones_url = '{}/milestones'.format(self.api_url)
+        milestones_url = '{}/projects/{}/milestones'.format(self.instance_url, self.project_id)
         milestone = self.api.post(milestones_url, data=data)
 
         if meta['must_close']:
@@ -129,7 +129,7 @@ class GitlabProject(Project):
     def get_milestones(self):
         if not hasattr(self, '_cache_milestones'):
             self._cache_milestones = self.api.get(
-                '{}/milestones'.format(self.api_url))
+                '{}/projects/{}/milestones'.format(self.instance_url, self.project_id))
         return self._cache_milestones
 
     def get_milestones_index(self):
