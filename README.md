@@ -52,8 +52,8 @@ Requires
 - Python >= 3.4
 - gitlab >= 7.0
 - redmine >= 1.3
-- Admin token on redmine
-- Admin token on gitlab
+- API token on redmine
+- API token on gitlab
 - No preexisting issues on gitlab project
 - Already synced users (those required in the project you are migrating)
 
