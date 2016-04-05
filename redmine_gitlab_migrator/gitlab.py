@@ -8,12 +8,21 @@ class GitlabClient(APIClient):
     MAX_PER_PAGE = 100
 
     def get(self, *args, **kwargs):
-        # Note that we do not handle pagination, but as we rely on list data
-        # only for milestones, we assume that we have < 100 milestones. Could
-        # be fixed though...
         kwargs['params'] = kwargs.get('params', {})
         kwargs['params']['per_page'] = self.MAX_PER_PAGE
-        return super().get(*args, **kwargs)
+        kwargs['params']['page'] = 1
+
+        results = []
+        while True:
+            data = super().get(*args, **kwargs)
+            if len(data) == 0:
+                break;
+
+            results += data
+            kwargs['params']['page'] = kwargs['params']['page'] + 1
+
+        return results
+
 
     def get_auth_headers(self):
         return {"PRIVATE-TOKEN": self.api_key}
