@@ -17,8 +17,12 @@ WHERE title ~* '{regex}' AND project_id={project_id};
 MIGRATE_IID_ISSUES = r"""
 UPDATE issues SET
   title = regexp_replace(issues.title, '{regex}','\2'),
-  iid = regexp_replace(issues.title, '{regex}', '\1')::integer
+  iid = ((regexp_replace(issues.title, '{regex}', '\1')::integer) * -1)
 WHERE title ~* '{regex}' AND project_id={project_id};
+
+UPDATE issues SET
+  iid = (iid * -1)
+WHERE project_id={project_id} AND iid < 0;
 """
 
 
