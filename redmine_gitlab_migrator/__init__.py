@@ -29,18 +29,39 @@ class APIClient:
         kwargs = self.add_auth_headers(kwargs)
         resp = func(*args, **kwargs)
         resp.raise_for_status()
+        return resp
+
+    def _req_json(self, func, *args, **kwargs):
+        resp = self._req(func, *args, **kwargs)
         ret = resp.json()
         log.debug('HTTP RESPONSE {}'.format(ret))
         return ret
-
+ 
     def get(self, *args, **kwargs):
-        return self._req(requests.get, *args, **kwargs)
+        return self._req_json(requests.get, *args, **kwargs)
 
     def post(self, *args, **kwargs):
-        return self._req(requests.post, *args, **kwargs)
+        return self._req_json(requests.post, *args, **kwargs)
 
     def put(self, *args, **kwargs):
-        return self._req(requests.put, *args, **kwargs)
+        return self._req_json(requests.put, *args, **kwargs)
+
+    def get_paginated(self, *args, **kwargs):
+        resp = self._req(requests.get, *args, **kwargs)
+        content = resp.json()
+ 
+        log.debug('HTTP RESPONSE {}'.format(content))
+
+        link_next = None
+        link_prev = None
+ 
+        if "next" in resp.links:
+            link_next = resp.links["next"]["url"]
+
+        if "prev" in resp.links:
+            link_prev = resp.links["prev"]["url"]
+ 
+        return [content, link_next, link_prev]
 
 
 class Project:
