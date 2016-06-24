@@ -100,13 +100,18 @@ class RedmineProject(Project):
         user_ids = set()
         users = []
         # FIXME: cache
-        for i in self.get_all_issues():
-            for i in chain(i.get('watchers', []),
-                           [i['author'], i.get('assigned_to', None)]):
+        for issue in self.get_all_issues():
+            for i in chain(issue.get('watchers', []),
+                           [issue['author'], issue.get('assigned_to', None)]):
 
                 if i is None:
                     continue
                 user_ids.add(i['id'])
+
+            for j in issue.get('journals', {}):
+                user = j.get('user', None)
+                if user:
+                    user_ids.add(user['id'])
 
         for i in user_ids:
             # The anonymous user is not really part of the project...

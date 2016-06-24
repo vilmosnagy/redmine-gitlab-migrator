@@ -2,6 +2,9 @@ import re
 
 from . import APIClient, Project
 
+import logging
+log = logging.getLogger(__name__)
+
 
 class GitlabClient(APIClient):
     # see http://doc.gitlab.com/ce/api/#pagination
@@ -13,8 +16,18 @@ class GitlabClient(APIClient):
         # be fixed though...
         kwargs['params'] = kwargs.get('params', {})
         kwargs['params']['per_page'] = self.MAX_PER_PAGE
-        return super().get(*args, **kwargs)
 
+        [content, nxt, last] = super().get_paginated(*args, **kwargs)
+        res = content
+
+        log.debug('LINK.NEXT: {}'.format(nxt))
+ 
+        while nxt is not None:
+            [content, nxt, last] = super().get_paginated(nxt, **kwargs)
+            res = res + content
+
+        return res
+ 
     def get_auth_headers(self):
         return {"PRIVATE-TOKEN": self.api_key}
 

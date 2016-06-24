@@ -41,6 +41,10 @@ def parse_args():
         'iid', help=perform_migrate_iid.__doc__)
     parser_iid.set_defaults(func=perform_migrate_iid)
 
+    parser_users = subparsers.add_parser(
+        'gitlab_users')
+    parser_users.set_defaults(func=perform_list_gitlab_users)
+ 
     for i in (parser_issues, parser_roadmap):
         i.add_argument('redmine_project_url')
         i.add_argument(
@@ -48,7 +52,7 @@ def parse_args():
             required=True,
             help="Redmine administrator API key")
 
-    for i in (parser_issues, parser_roadmap, parser_iid):
+    for i in (parser_issues, parser_roadmap, parser_iid, parser_users):
         i.add_argument('gitlab_project_url')
         i.add_argument(
             '--gitlab-key',
@@ -97,6 +101,12 @@ def check_no_milestone(redmine_project, gitlab_project):
 def check_origin_milestone(redmine_project, gitlab_project):
     return len(redmine_project.get_versions()) > 0
 
+def perform_list_gitlab_users(args):
+    gitlab = GitlabClient(args.gitlab_key)
+    gitlab_project = GitlabProject(args.gitlab_project_url, gitlab)
+    gitlab_instance = gitlab_project.get_instance()
+    users = gitlab_instance.get_all_users()
+    print(users)
 
 def perform_migrate_issues(args):
     redmine = RedmineClient(args.redmine_key)
