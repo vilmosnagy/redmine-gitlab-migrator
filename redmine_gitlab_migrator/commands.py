@@ -279,3 +279,6 @@ def main():
         except CommandError as e:
             log.error(e)
             exit(12)
+
+if __name__ == "__main__":
+    main()
