@@ -1,6 +1,6 @@
 import unittest
 
-from .fake import JOHN, JACK, REDMINE_ISSUE_1439, REDMINE_ISSUE_1732
+from redmine_gitlab_migrator.tests.fake import JOHN, JACK, REDMINE_ISSUE_1439, REDMINE_ISSUE_1732
 from redmine_gitlab_migrator.converters import (
     convert_issue, convert_version, relations_to_string)
 

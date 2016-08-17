@@ -7,7 +7,7 @@ import sys
 from redmine_gitlab_migrator.redmine import RedmineProject, RedmineClient
 from redmine_gitlab_migrator.gitlab import GitlabProject, GitlabClient
 from redmine_gitlab_migrator.converters import convert_issue, convert_version
-from redmine_gitlab_migrator.logging import setup_module_logging
+from redmine_gitlab_migrator.logger import setup_module_logging
 from redmine_gitlab_migrator.wiki import WikiPageConverter
 from redmine_gitlab_migrator import sql
 
@@ -30,6 +30,13 @@ def parse_args():
 
     subparsers = parser.add_subparsers(dest='command')
 
+    parser_users = subparsers.add_parser(
+        'ldap-users', help=perform_migrate_ldap_users.__doc__)
+    parser_users.set_defaults(func=perform_migrate_ldap_users)
+    parser_users.add_argument(
+            '--extern-uid',
+            required=True, help="TODO")
+
     parser_issues = subparsers.add_parser(
         'issues', help=perform_migrate_issues.__doc__)
     parser_issues.set_defaults(func=perform_migrate_issues)
@@ -46,7 +53,7 @@ def parse_args():
         'iid', help=perform_migrate_iid.__doc__)
     parser_iid.set_defaults(func=perform_migrate_iid)
 
-    for i in (parser_issues, parser_pages, parser_roadmap):
+    for i in (parser_issues, parser_pages, parser_roadmap, parser_users):
         i.add_argument('redmine_project_url')
         i.add_argument(
             '--redmine-key',
@@ -63,14 +70,14 @@ def parse_args():
         default=False,
         help="do not convert the history")
 
-    for i in (parser_issues, parser_roadmap, parser_iid):
+    for i in (parser_issues, parser_roadmap, parser_iid, parser_users):
         i.add_argument('gitlab_project_url')
         i.add_argument(
             '--gitlab-key',
             required=True,
             help="Gitlab administrator API key")
 
-    for i in (parser_issues, parser_pages, parser_roadmap, parser_iid):
+    for i in (parser_issues, parser_pages, parser_roadmap, parser_iid, parser_users):
         i.add_argument(
             '--check',
             required=False, action='store_true', default=False,
@@ -137,6 +144,37 @@ def perform_migrate_pages(args):
 
     for page in pages:
         wiki.convert(page)
+
+
+def perform_migrate_ldap_users(args):
+    redmine = RedmineClient(args.redmine_key)
+    gitlab = GitlabClient(args.gitlab_key)
+
+    redmine_project = RedmineProject(args.redmine_project_url, redmine)
+    gitlab_project = GitlabProject(args.gitlab_project_url, gitlab)
+    users = redmine_project.get_participants()
+
+    extern_uid = args.extern_uid
+
+    for user in users:
+        login = user['login']
+        if not gitlab_project.get_instance().check_users_exist([login]):
+            data = {
+                'email': user['mail'],
+                'extern_uid': extern_uid % {'login': login},
+                "provider": "ldapmain",
+                "name": '%(lastname)s %(firstname)s' % {
+                    'firstname': user['firstname'],
+                    'lastname': user['lastname']
+                },
+                "username": login,
+                'password': 'password',
+                "confirm": False,
+            }
+            gitlab_project.get_instance().create_user(data)
+
+    pass
+
 
 def perform_migrate_issues(args):
     redmine = RedmineClient(args.redmine_key)

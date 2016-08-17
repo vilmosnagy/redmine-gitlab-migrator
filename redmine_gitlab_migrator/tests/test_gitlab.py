@@ -1,6 +1,6 @@
 import unittest
 
-from .fake import FakeGitlabClient
+from redmine_gitlab_migrator.tests.fake import FakeGitlabClient
 from redmine_gitlab_migrator.gitlab import GitlabInstance, GitlabProject
 
 

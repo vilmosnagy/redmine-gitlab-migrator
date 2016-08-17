@@ -50,6 +50,12 @@ class GitlabInstance:
         gitlab_user_names = set([i['username'] for i in self.get_all_users()])
         return all((i in gitlab_user_names for i in usernames))
 
+    def create_user(self, data):
+        self.api.post(
+            '%(base_url)s/users/' % {'base_url': self.url},
+            data
+        )
+
 
 class GitlabProject(Project):
     REGEX_PROJECT_URL = re.compile(
