@@ -95,7 +95,7 @@ def convert_issue(redmine_issue, redmine_user_index, gitlab_user_index,
             close_text,
             relations_text
         ),
-        'labels': [redmine_issue['tracker']['name']]
+        'labels': redmine_issue['tracker']['name']
     }
 
     version = redmine_issue.get('fixed_version', None)
