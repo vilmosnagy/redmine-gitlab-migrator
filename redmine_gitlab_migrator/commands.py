@@ -8,6 +8,7 @@ from redmine_gitlab_migrator.redmine import RedmineProject, RedmineClient
 from redmine_gitlab_migrator.gitlab import GitlabProject, GitlabClient
 from redmine_gitlab_migrator.converters import convert_issue, convert_version
 from redmine_gitlab_migrator.logger import setup_module_logging
+from redmine_gitlab_migrator.wiki import TextileConverter
 from redmine_gitlab_migrator.wiki import WikiPageConverter
 from redmine_gitlab_migrator import sql
 
@@ -99,11 +100,14 @@ def check(func, message, redmine_project, gitlab_project):
         log.error('{}... FAILED'.format(message))
         exit(1)
 
-
-def check_users(redmine_project, gitlab_project):
+def map_users(redmine_project):
     users = redmine_project.get_participants()
     # Filter out anonymous user
-    nicks = [i['login'] for i in users if i['login'] != '']
+    nicks = [i['login'] if '@' not in i['login'] else i['login'].rsplit('@', 1)[0] for i in users if i['login'] != '']
+    return nicks
+
+def check_users(redmine_project, gitlab_project):
+    nicks = map_users(redmine_project)
     log.info('Project users are: {}'.format(', '.join(nicks) + ' '))
 
     return gitlab_project.get_instance().check_users_exist(nicks)
@@ -158,19 +162,40 @@ def perform_migrate_ldap_users(args):
 
     for user in users:
         login = user['login']
+        ldap = True
+        if "@" in login:
+            login = login.rsplit('@', 1)[0]
+            ldap = False
         if not gitlab_project.get_instance().check_users_exist([login]):
-            data = {
-                'email': user['mail'],
-                'extern_uid': extern_uid % {'login': login},
-                "provider": "ldapmain",
-                "name": '%(lastname)s %(firstname)s' % {
-                    'firstname': user['firstname'],
-                    'lastname': user['lastname']
-                },
-                "username": login,
-                'password': 'password',
-                "confirm": False,
-            }
+            data = None
+            if ldap:
+                log.info("Creating ldap user " + user['login'])
+                data = {
+                    'email': user['mail'],
+                    'extern_uid': extern_uid % {'login': login},
+                    "provider": "ldapmain",
+                    "name": '%(lastname)s %(firstname)s' % {
+                        'firstname': user['firstname'],
+                        'lastname': user['lastname']
+                    },
+                    "username": login,
+                    'password': 'password',
+                    "confirm": False,
+                }
+            else:
+                log.info("Creating normal user " + user['login'])
+                data = {
+                    'email': user['mail'],
+                    "name": '%(lastname)s %(firstname)s' % {
+                        'firstname': user['firstname'],
+                        'lastname': user['lastname']
+                    },
+                    "username": login,
+                    'password': 'password',
+                    "confirm": False,
+                    "can_create_group": False,
+                    "external": True
+                }
             gitlab_project.get_instance().create_user(data)
 
     pass
@@ -198,12 +223,16 @@ def perform_migrate_issues(args):
 
     # Get issues
 
+    issues_statuses = redmine_project.get_issues_statuses()
     issues = redmine_project.get_all_issues()
     milestones_index = gitlab_project.get_milestones_index()
+    textile_converter = TextileConverter()
     issues_data = (
         convert_issue(
-            i, redmine_users_index, gitlab_users_index, milestones_index)
+            i, redmine_users_index, gitlab_users_index, milestones_index, issues_statuses, textile_converter)
         for i in issues)
+
+    updated_users = gitlab_instance.update_users_to_admin(map_users(redmine_project))
 
     for data, meta in issues_data:
         if args.check:
@@ -223,6 +252,8 @@ def perform_migrate_issues(args):
         else:
             created = gitlab_project.create_issue(data, meta)
             log.info('#{iid} {title}'.format(**created))
+
+    gitlab_instance.downgrade_users_from_admin(updated_users)
 
 
 def perform_migrate_iid(args):

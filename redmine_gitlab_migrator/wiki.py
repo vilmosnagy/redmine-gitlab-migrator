@@ -6,28 +6,8 @@ import re
 
 log = logging.getLogger(__name__)
 
-class WikiPageConverter():
-    """
-    TODO:
-
-    * set author email address in git commit
-    * adjust issue numbers in links in case they do not match ("#123")
-    * check links to commits ("commit:01234abc") or changesets ("r123")
-    * make all wiki pages filenames lower-case and fix all links
-    * tables are sometimes not converted correctly.
-    * fix anything else that pandoc does not convert correctly.
-    
-    NOTE: This was tested with pandoc 1.17.0.2 - it may not work as nice
-          (or badly? :-)) with other versions.
-
-    Redmine's Textile:
-    http://www.redmine.org/projects/redmine/wiki/RedmineTextFormattingTextile
-    """
-
-    def __init__(self, local_repo_path):
-        self.repo_path = local_repo_path
-        self.repo = Repo(local_repo_path)
-
+class TextileConverter():
+    def __init__(self):
         # make sure we use at least version 17 of pandoc
         # TODO: fix this test, it will not work properly for version 1.2 or 1.100
         version = pypandoc.get_pandoc_version()
@@ -45,34 +25,9 @@ class WikiPageConverter():
         self.regexImportantMacro = re.compile(r'\{\{important\((.*?)\)\}\}')
         self.regexAnyMacro = re.compile(r'\{\{(.*)\}\}')
 
-    def convert(self, redmine_page):
-        title = redmine_page["title"].replace("ß", "ss")
-        title = title.replace("ä", "ae")
-        title = title.replace("ö", "oe")
-        title = title.replace("ü", "ue")
-        title = re.sub(self.regexNonASCII, r"_", title)
-        print("Converting {} ({} version {})".format(title, redmine_page["title"], redmine_page["version"]))
-
-        text = redmine_page["text"]
-
-        # create a copy of the original page (for comparison, will not be committed)
-        file_name = title + ".textile"
-        with open(self.repo_path + "/" + file_name, mode='w') as fd:
-            print(text, file=fd)
-
-        # replace some contents
-        text = text.replace("{{lastupdated_at}}", redmine_page["updated_on"])
-        text = text.replace("{{lastupdated_by}}", redmine_page["author"]["name"])
-        text = text.replace("[[PageOutline]]", "")
-        text = text.replace("{{>toc}}", "")
-
+    def convert(self, text):
         # convert from textile to markdown
         text = pypandoc.convert(text, 'markdown_strict', format='textile')
-
-        # create another copy
-        file_name = title + ".output"
-        with open(self.repo_path + "/" + file_name, mode='w') as fd:
-            print(text, file=fd)
 
         # pandoc does not convert everything, notably the [[link|text]] syntax
         # is not handled. So let's fix that.
@@ -96,6 +51,64 @@ class WikiPageConverter():
         # all other macros
         text = re.sub(self.regexAnyMacro, r'\1', text, re.MULTILINE | re.DOTALL)
 
+        return text
+
+class WikiPageConverter():
+    """
+    TODO:
+
+    * set author email address in git commit
+    * adjust issue numbers in links in case they do not match ("#123")
+    * check links to commits ("commit:01234abc") or changesets ("r123")
+    * make all wiki pages filenames lower-case and fix all links
+    * tables are sometimes not converted correctly.
+    * fix anything else that pandoc does not convert correctly.
+    
+    NOTE: This was tested with pandoc 1.17.0.2 - it may not work as nice
+          (or badly? :-)) with other versions.
+
+    Redmine's Textile:
+    http://www.redmine.org/projects/redmine/wiki/RedmineTextFormattingTextile
+    """
+
+    def __init__(self, local_repo_path):
+        self.repo_path = local_repo_path
+        self.repo = Repo(local_repo_path)
+
+        self.converter = TextileConverter()
+
+    def convert(self, redmine_page):
+        title = redmine_page["title"].replace("ß", "ss")
+        title = title.replace("ä", "ae")
+        title = title.replace("ö", "oe")
+        title = title.replace("ü", "ue")
+        title = re.sub(self.converter.regexNonASCII, r"_", title)
+        if title == "Wiki":
+            title = "Home"
+
+        print("Converting {} ({} version {})".format(title, redmine_page["title"], redmine_page["version"]))
+
+        text = redmine_page["text"]
+
+        # create a copy of the original page (for comparison, will not be committed)
+        file_name = title + ".textile"
+        with open(self.repo_path + "/" + file_name, mode='w') as fd:
+            print(text, file=fd)
+
+        # replace some contents
+        text = text.replace("{{lastupdated_at}}", redmine_page["updated_on"])
+        text = text.replace("{{lastupdated_by}}", redmine_page["author"]["name"])
+        text = text.replace("[[PageOutline]]", "")
+        text = text.replace("{{>toc}}", "")
+
+        self.converter.convert(text)
+        text = pypandoc.convert(text, 'markdown_strict', format='textile')
+
+        # create another copy
+        file_name = title + ".output"
+        with open(self.repo_path + "/" + file_name, mode='w') as fd:
+            print(text, file=fd)
+
         # save file with author/date
         file_name = title + ".md"
         with open(self.repo_path + "/" + file_name, mode='w') as fd:
@@ -109,7 +122,7 @@ class WikiPageConverter():
         else:
             commit_msg = title + ", version " + str(redmine_page["version"]);
 
-        author = Actor(redmine_page["author"]["name"], "")
+        author = Actor(redmine_page["author"]["name"], redmine_page["author"].get("mail", ""))
         time   = redmine_page["updated_on"].replace("T", " ").replace("Z", " +0000")
 
         self.repo.index.add([file_name])

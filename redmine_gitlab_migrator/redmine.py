@@ -60,6 +60,7 @@ class RedmineProject(Project):
         super().__init__(normalized_url, *args, **kwargs)
         self.api_url = '{}.json'.format(self.public_url)
         self.instance_url = self._url_match.group('base_url')
+        self.issue_cache = None
 
     @classmethod
     def _canonicalize_url(cls, url):
@@ -78,18 +79,21 @@ class RedmineProject(Project):
             return url
 
     def get_all_issues(self):
-        issues = self.api.unpaginated_get(
-            '{}/issues.json?status_id=*'.format(self.public_url))
-        detailed_issues = []
-        # It's impossible to get issue history from list view, so get it from
-        # detail view...
+        if self.issue_cache is None:
+            issues = self.api.unpaginated_get(
+                '{}/issues.json?status_id=*'.format(self.public_url))
+            detailed_issues = []
+            # It's impossible to get issue history from list view, so get it from
+            # detail view...
 
-        for issue_id in (i['id'] for i in issues):
-            issue_url = '{}/issues/{}.json?include=journals,watchers,relations,childrens,attachments'.format(
-                self.instance_url, issue_id)
-            detailed_issues.append(self.api.get(issue_url))
+            for issue_id in (i['id'] for i in issues):
+                issue_url = '{}/issues/{}.json?include=journals,watchers,relations,childrens,attachments'.format(
+                    self.instance_url, issue_id)
+                detailed_issues.append(self.api.get(issue_url))
 
-        return detailed_issues
+            self.issue_cache = detailed_issues
+
+        return self.issue_cache
 
     def get_all_pages(self):
         return self.api.get(
@@ -131,3 +135,6 @@ class RedmineProject(Project):
     def get_versions(self):
         response = self.api.get('{}/versions.json'.format(self.public_url))
         return response['versions']
+
+    def get_issues_statuses(self):
+        return {str(status['id']): status for status in self.api.get('{}/issue_statuses.json'.format(self.instance_url))}

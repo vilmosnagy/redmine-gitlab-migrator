@@ -8,9 +8,17 @@ log = logging.getLogger(__name__)
 
 # Utils
 
+def status_text(issue_statuses, status):
+    return issue_statuses.get(str(status), {'name': 'Unknown'})['name']
+
+def is_closed_issue(issue_statuses, status):
+    return issue_statuses.get(str(status), {}).get('is_closed', False)
 
 def redmine_uid_to_login(redmine_id, redmine_user_index):
-    return redmine_user_index[redmine_id]['login']
+    login = redmine_user_index[redmine_id]['login']
+    if "@" in login:
+        login = login.rsplit('@', 1)[0]
+    return login
 
 
 def redmine_uid_to_gitlab_uid(redmine_id,
@@ -19,7 +27,7 @@ def redmine_uid_to_gitlab_uid(redmine_id,
     return gitlab_user_index[username]['id']
 
 
-def convert_notes(redmine_issue_journals, redmine_user_index):
+def convert_notes(redmine_issue_journals, redmine_user_index, issue_statuses, textile_converter):
     """ Convert a list of redmine journal entries to gitlab notes
 
     Filters out the empty notes (ex: bare status change)
@@ -31,22 +39,29 @@ def convert_notes(redmine_issue_journals, redmine_user_index):
         "sudo_user" key).
     """
 
+    closed = False
     for entry in redmine_issue_journals:
         journal_notes = entry.get('notes', '')
+        created_at = entry.get('created_on', '')
+        try:
+            author = redmine_uid_to_login(
+                entry['user']['id'], redmine_user_index)
+        except KeyError:
+            # In some cases you have anonymous notes, which do not exist in
+            # gitlab.
+            log.warning(
+                'Redmine user {} is unknown, attribute note '
+                'to current admin\n'.format(entry['user']))
+            author = None
+
         if len(journal_notes) > 0:
-            body = "{}\n\n*(from redmine: written on {})*".format(
-                journal_notes, entry['created_on'][:10])
-            try:
-                author = redmine_uid_to_login(
-                    entry['user']['id'], redmine_user_index)
-            except KeyError:
-                # In some cases you have anonymous notes, which do not exist in
-                # gitlab.
-                log.warning(
-                    'Redmine user {} is unknown, attribute note '
-                    'to current admin\n'.format(entry['user']))
-                author = None
-            yield {'body': body}, {'sudo_user': author}
+            yield {'body': textile_converter.convert(journal_notes), 'created_at': created_at}, {'sudo_user': author}
+        for property in entry['details']:
+            if property.get('name', '') == 'status_id':
+                current_closed = is_closed_issue(issue_statuses, property.get('new_value'))
+                if closed != current_closed:
+                    closed = current_closed
+                    yield {'updated_at': created_at, 'state_event': 'close' if closed else 'reopen'}, {'sudo_user': author, 'must_close': True}
 
 
 def relations_to_string(relations, issue_id):
@@ -72,30 +87,21 @@ def relations_to_string(relations, issue_id):
 # Convertor
 
 def convert_issue(redmine_issue, redmine_user_index, gitlab_user_index,
-                  gitlab_milestones_index):
-    if redmine_issue.get('closed_on', None):
-        # quick'n dirty extract date
-        close_text = ', closed on {}'.format(redmine_issue['closed_on'][:10])
-        closed = True
-    else:
-        close_text = ''
-        closed = False
-
+                  gitlab_milestones_index, issue_statuses, textile_converter):
     relations = redmine_issue.get('relations', [])
     relations_text = relations_to_string(relations, redmine_issue['id'])
     if len(relations_text) > 0:
         relations_text = ', ' + relations_text
 
     data = {
-        'title': '-RM-{}-MR-{}'.format(
-            redmine_issue['id'], redmine_issue['subject']),
-        'description': '{}\n\n*(from redmine: created on {}{}{})*'.format(
-            redmine_issue['description'],
-            redmine_issue['created_on'][:10],
-            close_text,
+        'iid': redmine_issue['id'],
+        'title': redmine_issue['subject'],
+        'description': '{}\n\n{}'.format(
+            textile_converter.convert(redmine_issue['description']),
             relations_text
         ),
-        'labels': redmine_issue['tracker']['name']
+        'created_at': redmine_issue['created_on'],
+        'labels': redmine_issue['tracker']['name'] + ',' + redmine_issue['priority']['name'] + ',' + redmine_issue['status']['name']
     }
 
     version = redmine_issue.get('fixed_version', None)
@@ -115,9 +121,15 @@ def convert_issue(redmine_issue, redmine_user_index, gitlab_user_index,
     meta = {
         'sudo_user': author_login,
         'notes': list(convert_notes(redmine_issue['journals'],
-                                    redmine_user_index)),
-        'must_close': closed
+                                    redmine_user_index, issue_statuses, textile_converter))
     }
+
+    if redmine_issue.get('closed_on', None):
+        # quick'n dirty extract date
+        meta['closed_at'] = redmine_issue.get('closed_on')
+        meta['must_close'] = True
+    else:
+        meta['must_close'] = False
 
     assigned_to = redmine_issue.get('assigned_to', None)
     if assigned_to is not None:

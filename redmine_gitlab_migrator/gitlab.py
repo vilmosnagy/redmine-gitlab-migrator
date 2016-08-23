@@ -35,14 +35,20 @@ class GitlabInstance:
     def __init__(self, url, client):
         self.url = url.strip('/')  # normalize URL
         self.api = client
+        self.all_users = None
+        self.users = None
 
     def get_all_users(self):
-        return self.api.get('{}/users'.format(self.url))
+        if self.all_users is None:
+            self.all_users = self.api.get('{}/users'.format(self.url))
+        return self.all_users
 
     def get_users_index(self):
         """ Returns dict index of users (by login)
         """
-        return {i['username']: i for i in self.get_all_users()}
+        if self.users is None:
+            self.users = {i['username']: i for i in self.get_all_users()}
+        return self.users
 
     def check_users_exist(self, usernames):
         """ Returns True if all users exist
@@ -56,6 +62,22 @@ class GitlabInstance:
             data
         )
 
+    def update_users_to_admin(self, users):
+        updated_users = []
+        for login in users:
+            user = self.users[login]
+            if not user['is_admin']:
+                updated_users.append(login)
+                self.make_admin(user, True)
+        return updated_users
+
+    def downgrade_users_from_admin(self, updated_users):
+        for login in updated_users:
+            self.make_admin(self.users[login], False)
+        pass
+
+    def make_admin(self, user, is_admin):
+        return self.api.put('{}/users/{}?admin={}'.format(self.url, user['id'], 'true' if is_admin else 'false'), {})
 
 class GitlabProject(Project):
     REGEX_PROJECT_URL = re.compile(
@@ -81,22 +103,43 @@ class GitlabProject(Project):
         :param data: dict formatted as the gitlab API expects it
         :return: the created issue (without notes)
         """
+        altered_data = data.copy()
+        altered_data['sudo'] = meta['sudo_user']
         issues_url = '{}/issues'.format(self.api_url)
         issue = self.api.post(
-            issues_url, data=data)
+            issues_url, data=altered_data)
 
         issue_url = '{}/{}'.format(issues_url, issue['id'])
-
-        # Handle issues notes
         issue_notes_url = '{}/notes'.format(issue_url, 'notes')
+
+        issue_closed = False
+
         for note_data, note_meta in meta['notes']:
-            self.api.post(
-                issue_notes_url, data=note_data)
+            if note_meta.get('must_close', False):
+                issue_closed = True
+                altered_issue = {
+                    'id': issue['project_id'],
+                    'issue_id': issue['id'],
+                    'updated_at': note_data['updated_at'],
+                    'state_event': note_data['state_event'],
+                    'sudo': note_meta['sudo_user']
+                }
+                self.api.put(issue_url, data=altered_issue)
+            else:
+                altered_note = note_data.copy()
+                altered_note['sudo'] = note_meta['sudo_user']
+                self.api.post(
+                    issue_notes_url, data=altered_note)
 
         # Handle closed status
-        if meta['must_close']:
-            altered_issue = issue.copy()
-            altered_issue['state_event'] = 'close'
+        if not issue_closed and meta['must_close']:
+            altered_issue = {
+                'id': issue['project_id'],
+                'issue_id': issue['id'],
+                'updated_at': meta['closed_at'],
+                'state_event': 'close',
+                'sudo': meta['sudo_user']
+            }
             self.api.put(issue_url, data=altered_issue)
 
         return issue
