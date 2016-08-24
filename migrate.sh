@@ -13,11 +13,6 @@ else
 	GITLAB_NAME="$2"
 fi
 
-#REDMINE_HOST="http://redmine.webvalto.hu/projects"
-REDMINE_HOST="http://192.168.62.252:33333/projects"
-#GITLAB_HOST="http://192.168.60.184:8080"
-GITLAB_HOST="http://localhost:8989"
-
 REDMINE_PROJECT="${REDMINE_HOST}/${REDMINE_NAME}"
 GITLAB_PROJECT="${GITLAB_HOST}/${GITLAB_NAME}"
 
