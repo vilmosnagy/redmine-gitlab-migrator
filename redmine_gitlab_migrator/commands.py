@@ -174,7 +174,7 @@ def perform_migrate_ldap_users(args):
                     'email': user['mail'],
                     'extern_uid': extern_uid % {'login': login},
                     "provider": "ldapmain",
-                    "name": '%(lastname)s %(firstname)s' % {
+                    "name": '%(firstname)s %(lastname)s' % {
                         'firstname': user['firstname'],
                         'lastname': user['lastname']
                     },
