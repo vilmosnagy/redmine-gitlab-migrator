@@ -7,6 +7,11 @@ class GitlabClient(APIClient):
     # see http://doc.gitlab.com/ce/api/#pagination
     MAX_PER_PAGE = 100
 
+    def __init__(self, api_key):
+        super().__init__(api_key)
+        self.headers = {"PRIVATE-TOKEN": self.api_key}
+        self.url = None
+
     def get(self, *args, **kwargs):
         kwargs['params'] = kwargs.get('params', {})
         kwargs['params']['per_page'] = self.MAX_PER_PAGE
@@ -23,18 +28,50 @@ class GitlabClient(APIClient):
 
         return results
 
+    def post(self, *args, **kwargs):
+        data = kwargs['data']
+        sudo_user = data.get('sudo', None)
+        is_sudo_user = sudo_user is not None
+        original_headers = self.headers
+        if is_sudo_user:
+            self.set_temp_headers(sudo_user)
+        post_value = super(GitlabClient, self).post(*args, **kwargs)
+        if is_sudo_user:
+            self.reset_temp_headers(original_headers)
+        return post_value
+
+    def put(self, *args, **kwargs):
+        data = kwargs['data']
+        sudo_user = data.get('sudo', None)
+        is_sudo_user = sudo_user is not None
+        original_headers = self.headers
+        if is_sudo_user:
+            self.set_temp_headers(sudo_user)
+        post_value = super(GitlabClient, self).put(*args, **kwargs)
+        if is_sudo_user:
+            self.reset_temp_headers(original_headers)
+        return post_value
 
     def get_auth_headers(self):
-        return {"PRIVATE-TOKEN": self.api_key}
+        return self.headers
 
     def check_is_admin(self):
         pass
+
+    def set_temp_headers(self, user):
+        self.headers["SUDO"] = user
+        user_data = super(GitlabClient, self).get('{}/user'.format(self.url)) # we do not want pagination on this request
+        self.headers = {"PRIVATE-TOKEN": user_data["private_token"], "SUDO": user}
+
+    def reset_temp_headers(self, original_headers):
+        self.headers = original_headers
 
 
 class GitlabInstance:
     def __init__(self, url, client):
         self.url = url.strip('/')  # normalize URL
         self.api = client
+        self.api.url = self.url
         self.all_users = None
         self.users = None
 
