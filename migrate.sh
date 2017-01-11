@@ -17,7 +17,7 @@ REDMINE_PROJECT="${REDMINE_HOST}/${REDMINE_NAME}"
 GITLAB_PROJECT="${GITLAB_HOST}/${GITLAB_NAME}"
 
 python3 migrate_rg.py ldap-users --redmine-key=${REDMINE_KEY} --gitlab-key=${GITLAB_KEY} "--extern-uid=uid=%(login)s,ou=users,dc=webvalto,dc=hu" "${REDMINE_PROJECT}" "${GITLAB_PROJECT}" || exit 1
-python3 migrate_rg.py roadmap --debug --redmine-key=${REDMINE_KEY} --gitlab-key=${GITLAB_KEY} "${REDMINE_PROJECT}" "${GITLAB_PROJECT}"                                                            || exit 1
+python3 migrate_rg.py roadmap --debug --redmine-key=${REDMINE_KEY} --gitlab-key=${GITLAB_KEY} "${REDMINE_PROJECT}" "${GITLAB_PROJECT}"                                                    || exit 1
 python3 migrate_rg.py issues --debug --redmine-key=${REDMINE_KEY} --gitlab-key=${GITLAB_KEY} "${REDMINE_PROJECT}" "${GITLAB_PROJECT}"                                                     || exit 1
 
 git clone "${GITLAB_PROJECT}.wiki.git" wiki                                                                                                                                               || exit 1

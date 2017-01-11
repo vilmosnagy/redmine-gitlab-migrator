@@ -126,6 +126,8 @@ ENV/
 ## File-based project format:
 *.iws
 
+environment.sh
+
 ## Plugin-specific files:
 
 # IntelliJ
