@@ -1,0 +1,9 @@
+certifi==2017.4.17
+chardet==3.0.4
+gitdb2==2.0.2
+GitPython==2.1.5
+idna==2.5
+pypandoc==1.4
+requests==2.18.2
+smmap2==2.0.3
+urllib3==1.22
