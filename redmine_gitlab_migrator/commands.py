@@ -12,7 +12,6 @@ from redmine_gitlab_migrator.wiki import TextileConverter
 from redmine_gitlab_migrator.wiki import WikiPageConverter
 from redmine_gitlab_migrator import sql
 
-
 """Migration commands for issues and roadmaps from redmine to gitlab
 """
 
@@ -22,6 +21,7 @@ log = logging.getLogger(__name__)
 class CommandError(Exception):
     """ An error that will nicely pop up to user and stops program
     """
+
     def __init__(self, msg):
         self.msg = msg
 
@@ -35,8 +35,8 @@ def parse_args():
         'ldap-users', help=perform_migrate_ldap_users.__doc__)
     parser_users.set_defaults(func=perform_migrate_ldap_users)
     parser_users.add_argument(
-            '--extern-uid',
-            required=True, help="TODO")
+        '--extern-uid',
+        required=True, help="TODO")
 
     parser_issues = subparsers.add_parser(
         'issues', help=perform_migrate_issues.__doc__)
@@ -54,7 +54,11 @@ def parse_args():
         'iid', help=perform_migrate_iid.__doc__)
     parser_iid.set_defaults(func=perform_migrate_iid)
 
-    for i in (parser_issues, parser_pages, parser_roadmap, parser_users):
+    parser_iid = subparsers.add_parser(
+        'update-iid', help=generate_update_iid.__doc__)
+    parser_iid.set_defaults(func=generate_update_iid)
+
+    for i in (parser_issues, parser_pages, parser_roadmap, parser_users, parser_iid):
         i.add_argument('redmine_project_url')
         i.add_argument(
             '--redmine-key',
@@ -100,11 +104,13 @@ def check(func, message, redmine_project, gitlab_project):
         log.error('{}... FAILED'.format(message))
         exit(1)
 
+
 def map_users(redmine_project):
     users = redmine_project.get_participants()
     # Filter out anonymous user
     nicks = [i['login'] if '@' not in i['login'] else i['login'].rsplit('@', 1)[0] for i in users if i['login'] != '']
     return nicks
+
 
 def check_users(redmine_project, gitlab_project):
     nicks = map_users(redmine_project)
@@ -124,6 +130,7 @@ def check_no_milestone(redmine_project, gitlab_project):
 def check_origin_milestone(redmine_project, gitlab_project):
     return len(redmine_project.get_versions()) > 0
 
+
 def perform_migrate_pages(args):
     redmine = RedmineClient(args.redmine_key)
     redmine_project = RedmineProject(args.redmine_project_url, redmine)
@@ -136,7 +143,7 @@ def perform_migrate_pages(args):
     for page in redmine_project.get_all_pages():
         print("Collecting " + page["title"])
         start_version = page["version"] if args.no_history else 1
-        for version in range(start_version, page["version"]+1):
+        for version in range(start_version, page["version"] + 1):
             try:
                 full_page = redmine_project.get_page(page["title"], version)
                 pages.append(full_page)
@@ -256,6 +263,39 @@ def perform_migrate_issues(args):
     gitlab_instance.downgrade_users_from_admin(updated_users)
 
 
+def get_id_for_gitlab_issue_based_on_title(gitlab_issues, title):
+    retVal = None
+    for issue in gitlab_issues:
+        if issue['title'] == title:
+            if retVal is None:
+                retVal = issue['id']
+            else:
+                raise LookupError("Multiple issue with title: " + title)
+
+    if retVal is not None:
+        return str(retVal)
+    else:
+        return '<cant find issue for: ' + title + '>'
+
+
+def generate_update_iid(args):
+    redmine = RedmineClient(args.redmine_key)
+    gitlab = GitlabClient(args.gitlab_key)
+
+    redmine_project = RedmineProject(args.redmine_project_url, redmine)
+    gitlab_project = GitlabProject(args.gitlab_project_url, gitlab)
+    gitlab_issues = gitlab_project.get_issues()
+
+    issues = redmine_project.get_all_issues()
+    for issue in issues:
+        sql = 'UPDATE issues SET iid = '
+        sql += str(issue['id'])
+        sql += ' WHERE project_id = <project id> AND id = \''
+        sql += get_id_for_gitlab_issue_based_on_title(gitlab_issues, issue['subject'])
+        sql += '\';'
+        print(sql)
+
+
 def perform_migrate_iid(args):
     """ Should occur after the issues migration
     """
@@ -348,6 +388,7 @@ def main():
         except CommandError as e:
             log.error(e)
             exit(12)
+
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.DEBUG)

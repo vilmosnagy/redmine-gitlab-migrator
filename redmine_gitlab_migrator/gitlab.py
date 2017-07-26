@@ -59,9 +59,15 @@ class GitlabClient(APIClient):
         pass
 
     def set_temp_headers(self, user):
-        self.headers["SUDO"] = user
-        user_data = super(GitlabClient, self).get('{}/user'.format(self.url)) # we do not want pagination on this request
-        self.headers = {"PRIVATE-TOKEN": user_data["private_token"], "SUDO": user}
+        try:
+            self.headers["SUDO"] = user
+            user_data = super(GitlabClient, self).get('{}/user'.format(self.url)) # we do not want pagination on this request
+            if "private_token" in user_data:
+                self.headers = {"PRIVATE-TOKEN": user_data["private_token"], "SUDO": user}
+        except:
+            print("Use Private Token from Settings/Account/Private Token!")
+            raise
+
 
     def reset_temp_headers(self, original_headers):
         self.headers = original_headers
@@ -96,7 +102,7 @@ class GitlabInstance:
     def create_user(self, data):
         self.api.post(
             '%(base_url)s/users/' % {'base_url': self.url},
-            data
+            data=data
         )
 
     def update_users_to_admin(self, users):
@@ -114,7 +120,9 @@ class GitlabInstance:
         pass
 
     def make_admin(self, user, is_admin):
-        return self.api.put('{}/users/{}?admin={}'.format(self.url, user['id'], 'true' if is_admin else 'false'), {})
+        return self.api.put(
+            '{}/users/{}?admin={}'.format(self.url, user['id'], 'true' if is_admin else 'false'),
+            data={})
 
 class GitlabProject(Project):
     REGEX_PROJECT_URL = re.compile(
@@ -125,7 +133,7 @@ class GitlabProject(Project):
         self.api_url = (
             '{base_url}api/v3/projects/{namespace}%2F{project_name}'.format(
                 **self._url_match.groupdict()))
-        self.instance_url = '{}/api/v3'.format(
+        self.instance_url = '{}api/v3'.format(
             self._url_match.group('base_url'))
 
     def is_repository_empty(self):
